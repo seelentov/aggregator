@@ -223,6 +223,21 @@ func (a *Aggregator) GetVariable(context string, variable string, limit int, off
 	return nil
 }
 
+func (a *Aggregator) GetContext(context string) (result models.Context, err error) {
+	resp, err := a.request(fmt.Sprintf("/v1/contexts/%s", context), "GET", nil, true)
+	if err != nil {
+		return result, err
+	}
+
+	err = a.processResponse(resp, &result)
+
+	if err != nil {
+		return result, fmt.Errorf("can`t get context %s from %s: %w", context, a.url, err)
+	}
+
+	return result, nil
+}
+
 func (a *Aggregator) UpdateVariable(context string, variable string, value interface{}, method string) (err error) {
 
 	resp, err := a.request(fmt.Sprintf("/v1/contexts/%s/variables/%s", context, variable), method, value, true)
