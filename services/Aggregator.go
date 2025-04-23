@@ -3,10 +3,12 @@ package services
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/seelentov/aggregator/http/req"
@@ -23,6 +25,10 @@ type Aggregator struct {
 	authToken string
 	lastAuth  int64
 }
+
+var (
+	ErrNotFound = errors.New("not found")
+)
 
 func NewAggregator(url string, password string, user string, updateAuthMilli int64) (a *Aggregator, err error) {
 
@@ -210,7 +216,32 @@ func (a *Aggregator) GetEvents(context string, includeFormat bool) (result []mod
 }
 
 func (a *Aggregator) GetVariable(context string, variable string, limit int, offset int, target interface{}) (err error) {
-	resp, err := a.request(fmt.Sprintf("/v1/contexts/%s/variables/%s?limit=%v&offset=%v", context, variable, limit, offset), "GET", nil, true)
+	uri := strings.Builder{}
+
+	uri.WriteString("/v1/contexts/")
+	uri.WriteString(context)
+	uri.WriteString("/variables/")
+	uri.WriteString(variable)
+
+	if limit != 0 || offset != 0 {
+		uri.WriteByte('?')
+
+		if limit != 0 {
+			uri.WriteString("limit=")
+			uri.WriteString(fmt.Sprint(limit))
+		}
+
+		if limit != 0 && offset != 0 {
+			uri.WriteByte('&')
+		}
+
+		if offset != 0 {
+			uri.WriteString("offset=")
+			uri.WriteString(fmt.Sprint(offset))
+		}
+	}
+
+	resp, err := a.request(uri.String(), "GET", nil, true)
 	if err != nil {
 		return err
 	}
@@ -221,6 +252,31 @@ func (a *Aggregator) GetVariable(context string, variable string, limit int, off
 		return fmt.Errorf("can`t get variable %s:%s from %s: %w", context, variable, a.url, err)
 	}
 	return nil
+}
+
+func (a *Aggregator) GetRulesets(context string) ([]*models.RuleSet, error) {
+	var rs []*models.RuleSet
+
+	if err := a.GetVariable(context, "ruleSets", 0, 0, &rs); err != nil {
+		return nil, err
+	}
+
+	return rs, nil
+}
+
+func (a *Aggregator) GetRuleset(context string, ruleset string) (*models.RuleSet, error) {
+	rs, err := a.GetRulesets(context)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, el := range rs {
+		if el.Name == ruleset {
+			return el, nil
+		}
+	}
+
+	return nil, ErrNotFound
 }
 
 func (a *Aggregator) GetContext(context string) (result models.Context, err error) {
